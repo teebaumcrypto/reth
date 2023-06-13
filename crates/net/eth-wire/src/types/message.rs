@@ -4,7 +4,7 @@ use super::{
     GetNodeData, GetPooledTransactions, GetReceipts, NewBlock, NewPooledTransactionHashes66,
     NewPooledTransactionHashes68, NodeData, PooledTransactions, Receipts, Status, Transactions,
 };
-use crate::{errors::EthStreamError, EthVersion, SharedTransactions};
+use crate::{errors::EthStreamError, EthVersion, SharedTransactions, UpgradeStatus};
 use reth_primitives::bytes::{Buf, BufMut};
 use reth_rlp::{length_of_length, Decodable, Encodable, Header};
 use std::{fmt::Debug, sync::Arc};
@@ -95,6 +95,9 @@ impl ProtocolMessage {
                 let request_pair = RequestPair::<Receipts>::decode(buf)?;
                 EthMessage::Receipts(request_pair)
             }
+            EthMessageID::UpgradeStatus => {
+                EthMessage::UpgradeStatus(UpgradeStatus::decode(buf)?)
+            }
         };
         Ok(ProtocolMessage { message_type, message })
     }
@@ -183,6 +186,9 @@ pub enum EthMessage {
     NodeData(RequestPair<NodeData>),
     GetReceipts(RequestPair<GetReceipts>),
     Receipts(RequestPair<Receipts>),
+
+    // BNB Overload
+    UpgradeStatus(UpgradeStatus),
 }
 
 impl EthMessage {
@@ -205,6 +211,9 @@ impl EthMessage {
             EthMessage::NodeData(_) => EthMessageID::NodeData,
             EthMessage::GetReceipts(_) => EthMessageID::GetReceipts,
             EthMessage::Receipts(_) => EthMessageID::Receipts,
+
+            // BNB Overload
+            EthMessage::UpgradeStatus(_) => EthMessageID::UpgradeStatus,
         }
     }
 }
@@ -228,6 +237,7 @@ impl Encodable for EthMessage {
             EthMessage::NodeData(data) => data.encode(out),
             EthMessage::GetReceipts(request) => request.encode(out),
             EthMessage::Receipts(receipts) => receipts.encode(out),
+            EthMessage::UpgradeStatus(status) => status.encode(out),
         }
     }
     fn length(&self) -> usize {
@@ -248,6 +258,7 @@ impl Encodable for EthMessage {
             EthMessage::NodeData(data) => data.length(),
             EthMessage::GetReceipts(request) => request.length(),
             EthMessage::Receipts(receipts) => receipts.length(),
+            EthMessage::UpgradeStatus(status) => status.length(),
         }
     }
 }
@@ -313,6 +324,8 @@ pub enum EthMessageID {
     NodeData = 0x0e,
     GetReceipts = 0x0f,
     Receipts = 0x10,
+    // BSC Overload
+    UpgradeStatus = 0x0b,
 }
 
 impl Encodable for EthMessageID {
@@ -339,6 +352,7 @@ impl Decodable for EthMessageID {
             0x08 => EthMessageID::NewPooledTransactionHashes,
             0x09 => EthMessageID::GetPooledTransactions,
             0x0a => EthMessageID::PooledTransactions,
+            0x0b => EthMessageID::UpgradeStatus,
             0x0d => EthMessageID::GetNodeData,
             0x0e => EthMessageID::NodeData,
             0x0f => EthMessageID::GetReceipts,
@@ -366,6 +380,7 @@ impl TryFrom<usize> for EthMessageID {
             0x08 => Ok(EthMessageID::NewPooledTransactionHashes),
             0x09 => Ok(EthMessageID::GetPooledTransactions),
             0x0a => Ok(EthMessageID::PooledTransactions),
+            0x0b => Ok(EthMessageID::UpgradeStatus),
             0x0d => Ok(EthMessageID::GetNodeData),
             0x0e => Ok(EthMessageID::NodeData),
             0x0f => Ok(EthMessageID::GetReceipts),

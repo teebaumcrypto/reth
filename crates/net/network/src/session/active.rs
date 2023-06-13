@@ -167,6 +167,10 @@ impl ActiveSession {
                 error: EthStreamError::EthHandshakeError(EthHandshakeError::StatusNotInHandshake),
                 message,
             },
+            EthMessage::UpgradeStatus(status) =>  {
+                // UpgradeStatus should be handled in handshake already, therefore only Ok
+                OnIncomingMessageOutcome::Ok 
+            }
             EthMessage::NewBlockHashes(msg) => {
                 self.try_emit_broadcast(PeerMessage::NewBlockHashes(msg)).into()
             }
