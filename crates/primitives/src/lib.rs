@@ -48,11 +48,11 @@ pub use block::{
 pub use bloom::Bloom;
 pub use chain::{
     AllGenesisFormats, Chain, ChainInfo, ChainSpec, ChainSpecBuilder, ForkCondition, GOERLI,
-    MAINNET, SEPOLIA,
+    MAINNET, SEPOLIA, BSC,
 };
 pub use compression::*;
 pub use constants::{
-    EMPTY_OMMER_ROOT, GOERLI_GENESIS, KECCAK_EMPTY, MAINNET_GENESIS, SEPOLIA_GENESIS,
+    EMPTY_OMMER_ROOT, GOERLI_GENESIS, KECCAK_EMPTY, MAINNET_GENESIS, SEPOLIA_GENESIS, BSC_GENESIS,
 };
 pub use forkid::{ForkFilter, ForkHash, ForkId, ForkTransition, ValidationError};
 pub use genesis::{Genesis, GenesisAccount};
@@ -62,8 +62,8 @@ pub use hex_bytes::Bytes;
 pub use integer_list::IntegerList;
 pub use log::Log;
 pub use net::{
-    goerli_nodes, mainnet_nodes, sepolia_nodes, NodeRecord, GOERLI_BOOTNODES, MAINNET_BOOTNODES,
-    SEPOLIA_BOOTNODES,
+    goerli_nodes, mainnet_nodes, sepolia_nodes, bsc_nodes, NodeRecord, GOERLI_BOOTNODES, MAINNET_BOOTNODES,
+    SEPOLIA_BOOTNODES, BSC_BOOTNODES,
 };
 pub use peer::{PeerId, WithPeerId};
 pub use receipt::{Receipt, ReceiptWithBloom, ReceiptWithBloomRef};

@@ -130,6 +130,41 @@ pub static SEPOLIA: Lazy<Arc<ChainSpec>> = Lazy::new(|| {
     .into()
 });
 
+/// The BinanceSmartChain spec
+pub static BSC: Lazy<Arc<ChainSpec>> = Lazy::new(|| {
+    ChainSpec {
+        chain: Chain::mainnet(),
+        genesis: serde_json::from_str(include_str!("../../res/genesis/bsc.json"))
+            .expect("Can't deserialize BinanceSmartChain genesis json"),
+        genesis_hash: Some(H256(hex!(
+            "0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b"
+        ))),
+        // <https://etherscan.io/block/15537394>
+        paris_block_and_final_difficulty: None,
+        fork_timestamps: ForkTimestamps::default(),
+        hardforks: BTreeMap::from([
+            (Hardfork::EIP150, ForkCondition::Block(0)),
+            (Hardfork::EIP155, ForkCondition::Block(0)),
+            (Hardfork::EIP158, ForkCondition::Block(0)),
+            (Hardfork::Byzantium, ForkCondition::Block(0)),
+            (Hardfork::Constantinople, ForkCondition::Block(0)),
+            (Hardfork::Petersburg, ForkCondition::Block(0)),
+            (Hardfork::Istanbul, ForkCondition::Block(0)),
+            (Hardfork::MuirGlacier, ForkCondition::Block(0)),
+            (Hardfork::Ramanujan, ForkCondition::Block(0)),
+            (Hardfork::Niels, ForkCondition::Block(0)),
+            (Hardfork::MirrorSync, ForkCondition::Block(5184000)),
+            (Hardfork::Bruno, ForkCondition::Block(13082000)),
+            (Hardfork::Euler, ForkCondition::Block(18907621)),
+            (Hardfork::Nano, ForkCondition::Block(21962149)),
+            (Hardfork::Moran, ForkCondition::Block(22107423)),
+            (Hardfork::Gibbs, ForkCondition::Block(23846001)),
+            (Hardfork::Planck, ForkCondition::Block(27281024)),
+        ]),
+    }
+    .into()
+});
+
 /// An Ethereum chain specification.
 ///
 /// A chain specification describes:

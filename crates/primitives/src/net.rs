@@ -134,6 +134,27 @@ pub static SEPOLIA_BOOTNODES : [&str; 5] = [
 	"enode://9e9492e2e8836114cc75f5b929784f4f46c324ad01daf87d956f98b3b6c5fcba95524d6e5cf9861dc96a2c8a171ea7105bb554a197455058de185fa870970c7c@138.68.123.152:30303", // sepolia-bootnode-1-ams3
 ];
 
+
+/// BSC BOOTNODES 
+// https://api.binance.org/v1/discovery/peers
+pub static BSC_BOOTNODES : [&str; 14] = [
+    "enode://c014bbf48209cdf8ca6d3bf3ff5cf2fade45104283dcfc079df6c64e0f4b65e4afe28040fa1731a0732bd9cbb90786cf78f0174b5de7bd5b303088e80d8e6a83@54.74.101.143:30311",
+    "enode://322a42a08959aefd3423d17d8aeb802e0dbfb8bb0096aa712b6bf3036c91a80b0abc45c7a3d1320eda9a9c0337dd028967e4b84357080c258c8d0a3aaa02a821@34.245.12.138:30311",
+    "enode://84a76ad1fab6164cbb00179dd07c96755141ffb75d5d387f45295e6ecfcc9e12a720f1f3dca8318449eeff768d13e9d49a414d2b522d1bcf2919aebf4852ab46@44.198.58.179:30311",
+    "enode://453a3be470d06e9a96cf156b6d3e3b0ea172d3296aa23a2e6a334a100dc603a289b46f73244a8a0867e66560ed07f77efd722b4bfcbac96dd0a3216a055f0446@52.17.25.179:30311",
+    "enode://178b2c581f118632465d2eef36bba16bf6bbf9d36ff91b4f7c95e46f8e550d264ca8f72dd5d605d89c32957d255122bcae574fc0fee96b7ab599b16ce073c730@44.192.121.160:30311",
+    "enode://93be926c2f18a838d7ff074c9064d2a33ce6a16044334ec10d4536d49bb1f3e48614d30b88ff97b703003ded8bb819f92a81f43ae34193abc70f5547c7cdcb14@3.91.14.103:30311",
+    "enode://ba88d1a8a5e849bec0eb7df9eabf059f8edeae9a9eb1dcf51b7768276d78b10d4ceecf0cde2ef191ced02f66346d96a36ca9da7d73542757d9677af8da3bad3f@54.198.97.197:30311",
+    "enode://cc0c7707055b5711fd0699d066a6c0e48a3a6388f33a5963cf6dddc33195b968543c799fec79880c630d45d29dce96c42bb921789d3c98abad692d00becd01a8@54.174.117.230:30311",
+    "enode://a88322fa7db1958c4ce1c04e4980b7fdd23d2ea09ede072ffb487931dc62109cfad9defc2087568f625b4b5ac931c8f6f0baef37c988772efae2e12df3a30a70@52.19.216.114:30311",
+    "enode://768af449287561c0f17bb5dc5d98a1c6a4b1798cb41159bd0a7bfebdc179e39ad8076d7292caa9344eecb94a5f7499e632c29cc4edbdf2e8ada3f7c8c7b2a64b@3.95.173.72:30311",
+    "enode://b0dab0ee11caf8824f976d29d6a92174686826967d789fb3e08503cdcc2ff557a6f673b693b9b9bc56890144f81820acb4d1439b75f8f55237682da196ebd7f5@3.83.217.55:30311",
+    "enode://7287960657a7cd5a9e0e0cc6b4bb74110155979604d103929c5fcbfe6afc705c441d4b4cd2bdd0009f2ebb8185dab9fd78ef839af965a92c3ca5d45bd0303224@34.226.221.113:30311",
+    "enode://9b7ff9e2d2154f6de3f53db2123e6f9a6b5b29414d9d5ae8277592b361158c25fcab86e6bfad5ef6554c6d92fb4ca897f7342563e355b80bcdc994f9c268dc2f@34.251.95.115:30311",
+    "enode://71ef36f019bbdaa2a7b4676a61d014d0be81958e2c60dd95c66a5e1af10de6f3a62ecf9ad0c26b6c5789b81ac22f774abb4735cd9e259185773ebfd1efded5de@54.170.254.50:30311",
+];
+
+
 /// GOERLI bootnodes
 pub static GOERLI_BOOTNODES : [&str; 7] = [
     // Upstream bootnodes
@@ -163,6 +184,11 @@ pub fn goerli_nodes() -> Vec<NodeRecord> {
 /// Returns parsed sepolia nodes
 pub fn sepolia_nodes() -> Vec<NodeRecord> {
     parse_nodes(&SEPOLIA_BOOTNODES[..])
+}
+
+/// Returns parsed BinanceSmartChain nodes
+pub fn bsc_nodes() -> Vec<NodeRecord> {
+    parse_nodes(&BSC_BOOTNODES[..])
 }
 
 /// Parses all the nodes

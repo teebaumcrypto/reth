@@ -39,6 +39,30 @@ pub enum Hardfork {
     Paris,
     /// Shanghai.
     Shanghai,
+    /// EIP150.
+    EIP150,
+    /// EIP155.
+    EIP155,
+    /// EIP158.
+    EIP158,
+    /// Ramanujan.
+    Ramanujan,
+    /// Niels.
+    Niels,
+    /// MirrorSync.
+    MirrorSync,
+    /// Bruno.
+    Bruno,
+    /// Euler.
+    Euler,
+    /// Nano.
+    Nano,
+    /// Moran.
+    Moran,
+    /// Gibbs.
+    Gibbs,
+    /// Planck.
+    Planck,
 }
 
 impl Hardfork {

@@ -68,6 +68,10 @@ pub const GOERLI_GENESIS: H256 =
 pub const SEPOLIA_GENESIS: H256 =
     H256(hex!("25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"));
 
+/// BinanceSmartChain genesis hash.
+pub const BSC_GENESIS: H256 =
+    H256(hex!("0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b"));
+
 /// Keccak256 over empty array.
 pub const KECCAK_EMPTY: H256 =
     H256(hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"));

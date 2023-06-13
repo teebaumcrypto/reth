@@ -1,5 +1,5 @@
 use crate::{
-    net::{goerli_nodes, mainnet_nodes, sepolia_nodes},
+    net::{goerli_nodes, mainnet_nodes, sepolia_nodes, bsc_nodes},
     NodeRecord, U256,
 };
 use ethers_core::types::U64;
@@ -11,7 +11,7 @@ use std::{fmt, str::FromStr};
 // The chain spec module.
 mod spec;
 pub use spec::{
-    AllGenesisFormats, ChainSpec, ChainSpecBuilder, ForkCondition, GOERLI, MAINNET, SEPOLIA,
+    AllGenesisFormats, ChainSpec, ChainSpecBuilder, ForkCondition, GOERLI, MAINNET, SEPOLIA, BSC
 };
 
 // The chain info module.
@@ -42,6 +42,11 @@ impl Chain {
     /// Returns the sepolia chain.
     pub const fn sepolia() -> Self {
         Chain::Named(ethers_core::types::Chain::Sepolia)
+    }
+
+    /// Returns the bsc chain.
+    pub const fn bsc() -> Self {
+        Chain::Named(ethers_core::types::Chain::BinanceSmartChain)
     }
 
     /// The id of the chain
@@ -83,6 +88,7 @@ impl Chain {
             Mainnet => Some(mainnet_nodes()),
             Goerli => Some(goerli_nodes()),
             Sepolia => Some(sepolia_nodes()),
+            BinanceSmartChain => Some(bsc_nodes()),
             _ => None,
         }
     }

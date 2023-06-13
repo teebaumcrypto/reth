@@ -166,7 +166,7 @@ mod tests {
     use super::{init_genesis, InitDatabaseError};
     use reth_db::mdbx::test_utils::create_test_rw_db;
     use reth_primitives::{
-        GOERLI, GOERLI_GENESIS, MAINNET, MAINNET_GENESIS, SEPOLIA, SEPOLIA_GENESIS,
+        GOERLI, GOERLI_GENESIS, MAINNET, MAINNET_GENESIS, SEPOLIA, SEPOLIA_GENESIS, BSC, BSC_GENESIS,
     };
 
     #[test]
@@ -194,6 +194,15 @@ mod tests {
 
         // actual, expected
         assert_eq!(genesis_hash, SEPOLIA_GENESIS);
+    }
+
+    #[test]
+    fn success_init_genesis_bsc() {
+        let db = create_test_rw_db();
+        let genesis_hash = init_genesis(db, BSC.clone()).unwrap();
+
+        // actual, expected
+        assert_eq!(genesis_hash, BSC_GENESIS);
     }
 
     #[test]
