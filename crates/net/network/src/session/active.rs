@@ -167,7 +167,7 @@ impl ActiveSession {
                 error: EthStreamError::EthHandshakeError(EthHandshakeError::StatusNotInHandshake),
                 message,
             },
-            EthMessage::UpgradeStatus(status) =>  {
+            EthMessage::UpgradeStatus(_) =>  {
                 // UpgradeStatus should be handled in handshake already, therefore only Ok
                 OnIncomingMessageOutcome::Ok 
             }

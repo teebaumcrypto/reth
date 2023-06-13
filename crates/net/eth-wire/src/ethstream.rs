@@ -8,7 +8,7 @@ use futures::{ready, Sink, SinkExt, StreamExt};
 use pin_project::pin_project;
 use reth_primitives::{
     bytes::{Bytes, BytesMut},
-    ForkFilter,
+    ForkFilter, Chain,
 };
 use reth_rlp::Encodable;
 use std::{
@@ -146,8 +146,12 @@ where
 
                 // now we can create the `EthStream` because the peer has successfully completed
                 // the handshake
-                let stream = EthStream::new(version, self.inner);
+                let mut stream = EthStream::new(version, self.inner);
 
+                // We send now the upgrade Status for BSC
+                if status.chain == Chain::Named(ethers_core::types::Chain::BinanceSmartChain) {
+                    let _ = stream.send(EthMessage::UpgradeStatus(crate::UpgradeStatus::default())).await;
+                }
                 Ok((stream, resp))
             }
             _ => {
