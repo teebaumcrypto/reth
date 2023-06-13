@@ -133,7 +133,7 @@ pub static SEPOLIA: Lazy<Arc<ChainSpec>> = Lazy::new(|| {
 /// The BinanceSmartChain spec
 pub static BSC: Lazy<Arc<ChainSpec>> = Lazy::new(|| {
     ChainSpec {
-        chain: Chain::mainnet(),
+        chain: Chain::bsc(),
         genesis: serde_json::from_str(include_str!("../../res/genesis/bsc.json"))
             .expect("Can't deserialize BinanceSmartChain genesis json"),
         genesis_hash: Some(H256(hex!(
