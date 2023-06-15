@@ -16,11 +16,11 @@ use reth_primitives::{
     stage::{
         CheckpointBlockRange, EntitiesCheckpoint, ExecutionCheckpoint, StageCheckpoint, StageId,
     },
-    Block, BlockNumber, BlockWithSenders, Header, TransactionSigned, U256,
+    BlockNumber, Header, U256,
 };
 use reth_provider::{
     post_state::PostState, BlockExecutor, BlockProvider, DatabaseProviderRW, ExecutorFactory,
-    HeaderProvider, LatestStateProviderRef, ProviderError, WithdrawalsProvider,
+    HeaderProvider, LatestStateProviderRef, ProviderError,
 };
 use std::{ops::RangeInclusive, time::Instant};
 use tracing::*;
@@ -84,59 +84,6 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
         Self::new(executor_factory, ExecutionStageThresholds::default())
     }
 
-    // TODO(joshie): This should be in the block provider trait once we consolidate
-    fn read_block_with_senders<DB: Database>(
-        provider: &DatabaseProviderRW<'_, &DB>,
-        block_number: BlockNumber,
-    ) -> Result<(BlockWithSenders, U256), StageError> {
-        let header = provider
-            .header_by_number(block_number)?
-            .ok_or_else(|| ProviderError::HeaderNotFound(block_number.into()))?;
-        let td = provider
-            .header_td_by_number(block_number)?
-            .ok_or_else(|| ProviderError::HeaderNotFound(block_number.into()))?;
-        let ommers = provider.ommers(block_number.into())?.unwrap_or_default();
-        let withdrawals = provider.withdrawals_by_block(block_number.into(), header.timestamp)?;
-
-        // Get the block body
-        let body = provider.block_body_indices(block_number)?;
-        let tx_range = body.tx_num_range();
-
-        // Get the transactions in the body
-        let tx = provider.tx_ref();
-        let (transactions, senders) = if tx_range.is_empty() {
-            (Vec::new(), Vec::new())
-        } else {
-            let transactions = tx
-                .cursor_read::<tables::Transactions>()?
-                .walk_range(tx_range.clone())?
-                .map(|entry| entry.map(|tx| tx.1))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let senders = tx
-                .cursor_read::<tables::TxSenders>()?
-                .walk_range(tx_range)?
-                .map(|entry| entry.map(|sender| sender.1))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            (transactions, senders)
-        };
-
-        let body = transactions
-            .into_iter()
-            .map(|tx| {
-                TransactionSigned {
-                    // TODO: This is the fastest way right now to make everything just work with
-                    // a dummy transaction hash.
-                    hash: Default::default(),
-                    signature: tx.signature,
-                    transaction: tx.transaction,
-                }
-            })
-            .collect();
-        Ok((Block { header, body, ommers, withdrawals }.with_senders(senders), td))
-    }
-
     /// Execute the stage.
     pub fn execute_inner<DB: Database>(
         &self,
@@ -162,7 +109,12 @@ impl<EF: ExecutorFactory> ExecutionStage<EF> {
         // Execute block range
         let mut state = PostState::default();
         for block_number in start_block..=max_block {
-            let (block, td) = Self::read_block_with_senders(provider, block_number)?;
+            let td = provider
+                .header_td_by_number(block_number)?
+                .ok_or_else(|| ProviderError::HeaderNotFound(block_number.into()))?;
+            let block = provider
+                .block_with_senders(block_number)?
+                .ok_or_else(|| ProviderError::BlockNotFound(block_number.into()))?;
 
             // Configure the executor to use the current state.
             trace!(target: "sync::stages::execution", number = block_number, txs = block.body.len(), "Executing block");
@@ -470,7 +422,7 @@ mod tests {
         hex_literal::hex, keccak256, stage::StageUnitCheckpoint, Account, Bytecode,
         ChainSpecBuilder, SealedBlock, StorageEntry, H160, H256, MAINNET, U256,
     };
-    use reth_provider::{insert_canonical_block, ShareableDatabase};
+    use reth_provider::{insert_canonical_block, ProviderFactory};
     use reth_revm::Factory;
     use reth_rlp::Decodable;
     use std::sync::Arc;
@@ -487,8 +439,8 @@ mod tests {
     #[test]
     fn execution_checkpoint_matches() {
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let tx = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let tx = factory.provider_rw().unwrap();
 
         let previous_stage_checkpoint = ExecutionCheckpoint {
             block_range: CheckpointBlockRange { from: 0, to: 0 },
@@ -512,8 +464,8 @@ mod tests {
     #[test]
     fn execution_checkpoint_precedes() {
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let mut provider = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let mut provider = factory.provider_rw().unwrap();
 
         let mut genesis_rlp = hex!("f901faf901f5a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045571b40ae66ca7480791bbb2887286e4e4c4b1b298b191c889d6959023a32eda056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b901000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083020000808502540be400808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0").as_slice();
         let genesis = SealedBlock::decode(&mut genesis_rlp).unwrap();
@@ -532,7 +484,7 @@ mod tests {
             stage_checkpoint: Some(StageUnitCheckpoint::Execution(previous_stage_checkpoint)),
         };
 
-        let provider = db.provider_rw().unwrap();
+        let provider = factory.provider_rw().unwrap();
         let stage_checkpoint = execution_checkpoint(&provider, 1, 1, previous_checkpoint);
 
         assert_matches!(stage_checkpoint, Ok(ExecutionCheckpoint {
@@ -548,8 +500,8 @@ mod tests {
     #[test]
     fn execution_checkpoint_recalculate_full_previous_some() {
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let mut provider = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let mut provider = factory.provider_rw().unwrap();
 
         let mut genesis_rlp = hex!("f901faf901f5a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045571b40ae66ca7480791bbb2887286e4e4c4b1b298b191c889d6959023a32eda056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b901000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083020000808502540be400808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0").as_slice();
         let genesis = SealedBlock::decode(&mut genesis_rlp).unwrap();
@@ -568,7 +520,7 @@ mod tests {
             stage_checkpoint: Some(StageUnitCheckpoint::Execution(previous_stage_checkpoint)),
         };
 
-        let provider = db.provider_rw().unwrap();
+        let provider = factory.provider_rw().unwrap();
         let stage_checkpoint = execution_checkpoint(&provider, 1, 1, previous_checkpoint);
 
         assert_matches!(stage_checkpoint, Ok(ExecutionCheckpoint {
@@ -584,8 +536,8 @@ mod tests {
     #[test]
     fn execution_checkpoint_recalculate_full_previous_none() {
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let mut provider = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let mut provider = factory.provider_rw().unwrap();
 
         let mut genesis_rlp = hex!("f901faf901f5a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045571b40ae66ca7480791bbb2887286e4e4c4b1b298b191c889d6959023a32eda056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b901000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000083020000808502540be400808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0").as_slice();
         let genesis = SealedBlock::decode(&mut genesis_rlp).unwrap();
@@ -597,7 +549,7 @@ mod tests {
 
         let previous_checkpoint = StageCheckpoint { block_number: 1, stage_checkpoint: None };
 
-        let provider = db.provider_rw().unwrap();
+        let provider = factory.provider_rw().unwrap();
         let stage_checkpoint = execution_checkpoint(&provider, 1, 1, previous_checkpoint);
 
         assert_matches!(stage_checkpoint, Ok(ExecutionCheckpoint {
@@ -614,8 +566,8 @@ mod tests {
         // TODO cleanup the setup after https://github.com/paradigmxyz/reth/issues/332
         // is merged as it has similar framework
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let mut provider = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let mut provider = factory.provider_rw().unwrap();
         let input = ExecInput {
             target: Some(1),
             /// The progress of this stage the last time it was executed.
@@ -630,7 +582,7 @@ mod tests {
         provider.commit().unwrap();
 
         // insert pre state
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let db_tx = provider.tx_mut();
         let acc1 = H160(hex!("1000000000000000000000000000000000000000"));
         let acc2 = H160(hex!("a94f5374fce5edbc8e2a8697c15331677e6ebf0b"));
@@ -652,7 +604,7 @@ mod tests {
         db_tx.put::<tables::Bytecodes>(code_hash, Bytecode::new_raw(code.to_vec().into())).unwrap();
         provider.commit().unwrap();
 
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let mut execution_stage = stage();
         let output = execution_stage.execute(&mut provider, input).await.unwrap();
         provider.commit().unwrap();
@@ -672,7 +624,7 @@ mod tests {
             },
             done: true
         } if processed == total && total == block.gas_used);
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let tx = provider.tx_mut();
         // check post state
         let account1 = H160(hex!("1000000000000000000000000000000000000000"));
@@ -722,8 +674,8 @@ mod tests {
         // is merged as it has similar framework
 
         let state_db = create_test_db::<WriteMap>(EnvKind::RW);
-        let db = ShareableDatabase::new(state_db.as_ref(), MAINNET.clone());
-        let mut provider = db.provider_rw().unwrap();
+        let factory = ProviderFactory::new(state_db.as_ref(), MAINNET.clone());
+        let mut provider = factory.provider_rw().unwrap();
         let input = ExecInput {
             target: Some(1),
             /// The progress of this stage the last time it was executed.
@@ -742,7 +694,7 @@ mod tests {
         let balance = U256::from(0x3635c9adc5dea00000u128);
         let code_hash = keccak256(code);
         // pre state
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let db_tx = provider.tx_mut();
         let acc1 = H160(hex!("1000000000000000000000000000000000000000"));
         let acc1_info = Account { nonce: 0, balance: U256::ZERO, bytecode_hash: Some(code_hash) };
@@ -755,12 +707,12 @@ mod tests {
         provider.commit().unwrap();
 
         // execute
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let mut execution_stage = stage();
         let result = execution_stage.execute(&mut provider, input).await.unwrap();
         provider.commit().unwrap();
 
-        let mut provider = db.provider_rw().unwrap();
+        let mut provider = factory.provider_rw().unwrap();
         let mut stage = stage();
         let result = stage
             .unwind(
@@ -812,7 +764,7 @@ mod tests {
     #[tokio::test]
     async fn test_selfdestruct() {
         let test_tx = TestTransaction::default();
-        let factory = ShareableDatabase::new(test_tx.tx.as_ref(), MAINNET.clone());
+        let factory = ProviderFactory::new(test_tx.tx.as_ref(), MAINNET.clone());
         let mut provider = factory.provider_rw().unwrap();
         let input = ExecInput {
             target: Some(1),
