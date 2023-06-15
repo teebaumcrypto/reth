@@ -216,7 +216,7 @@ pub struct Neighbours {
 /// We need to wrap the ENR type because of Rust's orphan rules not allowing
 /// implementing a foreign trait on a foreign type.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EnrWrapper<K: EnrKey>(Enr<K>);
+pub struct EnrWrapper<K: EnrKey>(pub Enr<K>);
 
 impl<K: EnrKey> EnrWrapper<K> {
     pub fn new(enr: Enr<K>) -> Self {
