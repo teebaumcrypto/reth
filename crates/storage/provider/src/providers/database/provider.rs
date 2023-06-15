@@ -25,10 +25,10 @@ use reth_interfaces::Result;
 use reth_primitives::{
     keccak256,
     stage::{StageCheckpoint, StageId},
-    Account, Address, Block, BlockHash, BlockHashOrNumber, BlockNumber, ChainInfo, ChainSpec,
-    Hardfork, Head, Header, Receipt, SealedBlock, SealedBlockWithSenders, SealedHeader,
-    StorageEntry, TransactionMeta, TransactionSigned, TransactionSignedEcRecovered, TxHash,
-    TxNumber, Withdrawal, H256, U256,
+    Account, Address, Block, BlockHash, BlockHashOrNumber, BlockNumber, BlockWithSenders,
+    ChainInfo, ChainSpec, Hardfork, Head, Header, Receipt, SealedBlock, SealedBlockWithSenders,
+    SealedHeader, StorageEntry, TransactionMeta, TransactionSigned, TransactionSignedEcRecovered,
+    TransactionSignedNoHash, TxHash, TxNumber, Withdrawal, H256, U256,
 };
 use reth_revm_primitives::{
     config::revm_spec,
@@ -215,22 +215,16 @@ impl<'this, TX: DbTx<'this>> DatabaseProvider<'this, TX> {
         &self,
         range: RangeInclusive<BlockNumber>,
     ) -> std::result::Result<BTreeMap<Address, BTreeSet<H256>>, TransactionError> {
-        Ok(self
-            .tx
+        self.tx
             .cursor_read::<tables::StorageChangeSet>()?
             .walk_range(BlockNumberAddress::range(range))?
-            .collect::<std::result::Result<Vec<_>, _>>()?
-            .into_iter()
             // fold all storages and save its old state so we can remove it from HashedStorage
             // it is needed as it is dup table.
-            .fold(
-                BTreeMap::new(),
-                |mut accounts: BTreeMap<Address, BTreeSet<H256>>,
-                 (BlockNumberAddress((_, address)), storage_entry)| {
-                    accounts.entry(address).or_default().insert(storage_entry.key);
-                    accounts
-                },
-            ))
+            .try_fold(BTreeMap::new(), |mut accounts: BTreeMap<Address, BTreeSet<H256>>, entry| {
+                let (BlockNumberAddress((_, address)), storage_entry) = entry?;
+                accounts.entry(address).or_default().insert(storage_entry.key);
+                Ok(accounts)
+            })
     }
 
     /// Get plainstate storages
@@ -265,23 +259,22 @@ impl<'this, TX: DbTx<'this>> DatabaseProvider<'this, TX> {
         &self,
         range: RangeInclusive<BlockNumber>,
     ) -> std::result::Result<BTreeMap<(Address, H256), Vec<u64>>, TransactionError> {
-        let storage_changeset = self
-            .tx
-            .cursor_read::<tables::StorageChangeSet>()?
-            .walk_range(BlockNumberAddress::range(range))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut changeset_cursor = self.tx.cursor_read::<tables::StorageChangeSet>()?;
 
-        // fold all storages to one set of changes
-        let storage_changeset_lists = storage_changeset.into_iter().fold(
-            BTreeMap::new(),
-            |mut storages: BTreeMap<(Address, H256), Vec<u64>>, (index, storage)| {
-                storages
-                    .entry((index.address(), storage.key))
-                    .or_default()
-                    .push(index.block_number());
-                storages
-            },
-        );
+        let storage_changeset_lists =
+            changeset_cursor.walk_range(BlockNumberAddress::range(range))?.try_fold(
+                BTreeMap::new(),
+                |mut storages: BTreeMap<(Address, H256), Vec<u64>>,
+                 entry|
+                 -> std::result::Result<_, TransactionError> {
+                    let (index, storage) = entry?;
+                    storages
+                        .entry((index.address(), storage.key))
+                        .or_default()
+                        .push(index.block_number());
+                    Ok(storages)
+                },
+            )?;
 
         Ok(storage_changeset_lists)
     }
@@ -293,22 +286,18 @@ impl<'this, TX: DbTx<'this>> DatabaseProvider<'this, TX> {
         &self,
         range: RangeInclusive<BlockNumber>,
     ) -> std::result::Result<BTreeMap<Address, Vec<u64>>, TransactionError> {
-        let account_changesets = self
-            .tx
-            .cursor_read::<tables::AccountChangeSet>()?
-            .walk_range(range)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut changeset_cursor = self.tx.cursor_read::<tables::AccountChangeSet>()?;
 
-        let account_transtions = account_changesets
-            .into_iter()
-            // fold all account to one set of changed accounts
-            .fold(
-                BTreeMap::new(),
-                |mut accounts: BTreeMap<Address, Vec<u64>>, (index, account)| {
-                    accounts.entry(account.address).or_default().push(index);
-                    accounts
-                },
-            );
+        let account_transtions = changeset_cursor.walk_range(range)?.try_fold(
+            BTreeMap::new(),
+            |mut accounts: BTreeMap<Address, Vec<u64>>,
+             entry|
+             -> std::result::Result<_, TransactionError> {
+                let (index, account) = entry?;
+                accounts.entry(account.address).or_default().push(index);
+                Ok(accounts)
+            },
+        )?;
 
         Ok(account_transtions)
     }
@@ -318,17 +307,14 @@ impl<'this, TX: DbTx<'this>> DatabaseProvider<'this, TX> {
         &self,
         range: RangeInclusive<BlockNumber>,
     ) -> std::result::Result<BTreeSet<Address>, TransactionError> {
-        Ok(self
-            .tx
-            .cursor_read::<tables::AccountChangeSet>()?
-            .walk_range(range)?
-            .collect::<std::result::Result<Vec<_>, _>>()?
-            .into_iter()
-            // fold all account to one set of changed accounts
-            .fold(BTreeSet::new(), |mut accounts: BTreeSet<Address>, (_, account_before)| {
+        self.tx.cursor_read::<tables::AccountChangeSet>()?.walk_range(range)?.try_fold(
+            BTreeSet::new(),
+            |mut accounts: BTreeSet<Address>, entry| {
+                let (_, account_before) = entry?;
                 accounts.insert(account_before.address);
-                accounts
-            }))
+                Ok(accounts)
+            },
+        )
     }
 
     /// Get plainstate account from iterator
@@ -1104,8 +1090,7 @@ impl<'this, TX: DbTxMut<'this> + DbTx<'this>> DatabaseProvider<'this, TX> {
         id: StageId,
         checkpoint: StageCheckpoint,
     ) -> std::result::Result<(), DatabaseError> {
-        self.tx.put::<tables::SyncStage>(id.to_string(), checkpoint)?;
-        Ok(())
+        self.tx.put::<tables::SyncStage>(id.to_string(), checkpoint)
     }
 
     /// Get stage checkpoint progress.
@@ -1122,8 +1107,7 @@ impl<'this, TX: DbTxMut<'this> + DbTx<'this>> DatabaseProvider<'this, TX> {
         id: StageId,
         checkpoint: Vec<u8>,
     ) -> std::result::Result<(), DatabaseError> {
-        self.tx.put::<tables::SyncStageProgress>(id.to_string(), checkpoint)?;
-        Ok(())
+        self.tx.put::<tables::SyncStageProgress>(id.to_string(), checkpoint)
     }
 
     /// Get lastest block number.
@@ -1457,18 +1441,15 @@ impl<'this, TX: DbTx<'this>> AccountExtProvider for DatabaseProvider<'this, TX> 
         &self,
         range: impl RangeBounds<BlockNumber>,
     ) -> Result<BTreeSet<Address>> {
-        Ok(self
-            .tx
+        self.tx
             .cursor_read::<tables::AccountChangeSet>()?
             .walk_range(range)?
-            .collect::<std::result::Result<Vec<_>, _>>()?
-            .into_iter()
-            // fold all account to one set of changed accounts
-            .fold(BTreeSet::new(), |mut accounts: BTreeSet<Address>, (_, account_before)| {
-                accounts.insert(account_before.address);
-                accounts
-            }))
+            .map(|entry| {
+                entry.map(|(_, account_before)| account_before.address).map_err(Into::into)
+            })
+            .collect()
     }
+
     fn basic_accounts(
         &self,
         iter: impl IntoIterator<Item = Address>,
@@ -1628,6 +1609,48 @@ impl<'this, TX: DbTx<'this>> BlockProvider for DatabaseProvider<'this, TX> {
     fn block_body_indices(&self, num: u64) -> Result<Option<StoredBlockBodyIndices>> {
         Ok(self.tx.get::<tables::BlockBodyIndices>(num)?)
     }
+
+    /// Returns the block with senders with matching number from database.
+    ///
+    /// **NOTE: The transactions have invalid hashes, since they would need to be calculated on the
+    /// spot, and we want fast querying.**
+    ///
+    /// Returns `None` if block is not found.
+    fn block_with_senders(&self, block_number: BlockNumber) -> Result<Option<BlockWithSenders>> {
+        let header = self
+            .header_by_number(block_number)?
+            .ok_or_else(|| ProviderError::HeaderNotFound(block_number.into()))?;
+
+        let ommers = self.ommers(block_number.into())?.unwrap_or_default();
+        let withdrawals = self.withdrawals_by_block(block_number.into(), header.timestamp)?;
+
+        // Get the block body
+        let body = self
+            .block_body_indices(block_number)?
+            .ok_or(ProviderError::BlockBodyIndicesNotFound(block_number))?;
+        let tx_range = body.tx_num_range();
+
+        let (transactions, senders) = if tx_range.is_empty() {
+            (vec![], vec![])
+        } else {
+            (self.transactions_by_tx_range(tx_range.clone())?, self.senders_by_tx_range(tx_range)?)
+        };
+
+        let body = transactions
+            .into_iter()
+            .map(|tx| {
+                TransactionSigned {
+                    // TODO: This is the fastest way right now to make everything just work with
+                    // a dummy transaction hash.
+                    hash: Default::default(),
+                    signature: tx.signature,
+                    transaction: tx.transaction,
+                }
+            })
+            .collect();
+
+        Ok(Some(Block { header, body, ommers, withdrawals }.with_senders(senders)))
+    }
 }
 
 impl<'this, TX: DbTx<'this>> TransactionsProvider for DatabaseProvider<'this, TX> {
@@ -1652,9 +1675,9 @@ impl<'this, TX: DbTx<'this>> TransactionsProvider for DatabaseProvider<'this, TX
         &self,
         tx_hash: TxHash,
     ) -> Result<Option<(TransactionSigned, TransactionMeta)>> {
+        let mut transaction_cursor = self.tx.cursor_read::<tables::TransactionBlock>()?;
         if let Some(transaction_id) = self.transaction_id(tx_hash)? {
             if let Some(transaction) = self.transaction_by_id(transaction_id)? {
-                let mut transaction_cursor = self.tx.cursor_read::<tables::TransactionBlock>()?;
                 if let Some(block_number) =
                     transaction_cursor.seek(transaction_id).map(|b| b.map(|(_, bn)| bn))?
                 {
@@ -1694,13 +1717,13 @@ impl<'this, TX: DbTx<'this>> TransactionsProvider for DatabaseProvider<'this, TX
         &self,
         id: BlockHashOrNumber,
     ) -> Result<Option<Vec<TransactionSigned>>> {
+        let mut tx_cursor = self.tx.cursor_read::<tables::Transactions>()?;
         if let Some(block_number) = self.convert_hash_or_number(id)? {
             if let Some(body) = self.block_body_indices(block_number)? {
                 let tx_range = body.tx_num_range();
                 return if tx_range.is_empty() {
                     Ok(Some(Vec::new()))
                 } else {
-                    let mut tx_cursor = self.tx.cursor_read::<tables::Transactions>()?;
                     let transactions = tx_cursor
                         .walk_range(tx_range)?
                         .map(|result| result.map(|(_, tx)| tx.into()))
@@ -1716,14 +1739,14 @@ impl<'this, TX: DbTx<'this>> TransactionsProvider for DatabaseProvider<'this, TX
         &self,
         range: impl RangeBounds<BlockNumber>,
     ) -> Result<Vec<Vec<TransactionSigned>>> {
-        let mut results = Vec::default();
+        let mut results = Vec::new();
         let mut body_cursor = self.tx.cursor_read::<tables::BlockBodyIndices>()?;
         let mut tx_cursor = self.tx.cursor_read::<tables::Transactions>()?;
         for entry in body_cursor.walk_range(range)? {
             let (_, body) = entry?;
             let tx_num_range = body.tx_num_range();
             if tx_num_range.is_empty() {
-                results.push(Vec::default());
+                results.push(Vec::new());
             } else {
                 results.push(
                     tx_cursor
@@ -1734,6 +1757,27 @@ impl<'this, TX: DbTx<'this>> TransactionsProvider for DatabaseProvider<'this, TX
             }
         }
         Ok(results)
+    }
+
+    fn transactions_by_tx_range(
+        &self,
+        range: impl RangeBounds<TxNumber>,
+    ) -> Result<Vec<TransactionSignedNoHash>> {
+        Ok(self
+            .tx
+            .cursor_read::<tables::Transactions>()?
+            .walk_range(range)?
+            .map(|entry| entry.map(|tx| tx.1))
+            .collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    fn senders_by_tx_range(&self, range: impl RangeBounds<TxNumber>) -> Result<Vec<Address>> {
+        Ok(self
+            .tx
+            .cursor_read::<tables::TxSenders>()?
+            .walk_range(range)?
+            .map(|entry| entry.map(|sender| sender.1))
+            .collect::<std::result::Result<Vec<_>, _>>()?)
     }
 }
 
@@ -1792,13 +1836,9 @@ impl<'this, TX: DbTx<'this>> WithdrawalsProvider for DatabaseProvider<'this, TX>
     }
 
     fn latest_withdrawal(&self) -> Result<Option<Withdrawal>> {
-        let latest_block_withdrawal = self.tx.cursor_read::<tables::BlockWithdrawals>()?.last();
-        latest_block_withdrawal
-            .map(|block_withdrawal_pair| {
-                block_withdrawal_pair
-                    .and_then(|(_, block_withdrawal)| block_withdrawal.withdrawals.last().cloned())
-            })
-            .map_err(Into::into)
+        let latest_block_withdrawal = self.tx.cursor_read::<tables::BlockWithdrawals>()?.last()?;
+        Ok(latest_block_withdrawal
+            .and_then(|(_, mut block_withdrawal)| block_withdrawal.withdrawals.pop()))
     }
 }
 
