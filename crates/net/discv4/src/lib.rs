@@ -30,7 +30,7 @@ use discv5::{
     ConnectionDirection, ConnectionState,
 };
 use enr::{Enr, EnrBuilder};
-use proto::{EnrRequest, EnrResponse, EnrWrapper};
+pub use proto::{EnrRequest, EnrResponse, EnrWrapper};
 use reth_primitives::{
     bytes::{Bytes, BytesMut},
     ForkId, PeerId, H256,
@@ -345,7 +345,7 @@ pub struct Discv4Service {
     /// Local address of the UDP socket.
     local_address: SocketAddr,
     /// The local ENR for EIP-868 <https://eips.ethereum.org/EIPS/eip-868>
-    local_eip_868_enr: Enr<SecretKey>,
+    pub local_eip_868_enr: Enr<SecretKey>,
     /// Local ENR of the server.
     local_node_record: NodeRecord,
     /// The secret key used to sign payloads
